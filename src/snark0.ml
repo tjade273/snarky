@@ -2089,8 +2089,8 @@ module Run = struct
       end
     end
 
-    module Prover = struct
-      type t = unit
+    module As_prover = struct
+      type 'a t = 'a
 
       let eval_as_prover f =
         if !state.Runner.as_prover && Option.is_some !state.Runner.prover_state
@@ -2101,19 +2101,16 @@ module Run = struct
           a )
         else failwith "Can't evaluate prover code outside an as_prover block"
 
-      let read_var ~p var = eval_as_prover (As_prover.read_var var)
+      let read_var var = eval_as_prover (As_prover.read_var var)
 
-      let get_state ~p = eval_as_prover As_prover.get_state
+      let get_state = eval_as_prover As_prover.get_state
 
-      let set_state ~p s = eval_as_prover (As_prover.set_state s)
+      let set_state s = eval_as_prover (As_prover.set_state s)
 
-      let read ~p typ var = eval_as_prover (As_prover.read typ var)
+      let modify_state f = eval_as_prover (As_prover.modify_state f)
 
-      include Field.Constant.T
-    end
+      let read typ var = eval_as_prover (As_prover.read typ var)
 
-    module As_prover = struct
-      include As_prover
       include Field.Constant.T
 
       let run_prover f tbl s =
@@ -2126,7 +2123,13 @@ module Run = struct
         else failwith "Can't evaluate prover code outside an as_prover block"
     end
 
-    module Handle = Handle
+    module Handle = struct
+      type ('var, 'value) t = ('var, 'value) Handle.t = {var: 'var; value: 'value option}
+
+      let value handle () = As_prover.eval_as_prover (Handle.value handle)
+
+      let var = Handle.var
+    end
 
     module Proof_system = struct
       open Run.Proof_system
@@ -2147,12 +2150,11 @@ module Run = struct
              ())
 
       let run_checked ~public_input ?handler (proof_system : _ t) =
-        Or_error.map
-          (run_checked ~run:as_stateful ~public_input ?handler proof_system ())
-          ~f:snd
+        Or_error.map (run_checked' ~run:as_stateful ~public_input ?handler proof_system ())
+          ~f:(fun (s, x, state) -> x)
 
       let check ~public_input ?handler (proof_system : _ t) =
-        check ~run:as_stateful ~public_input ?handler proof_system ()
+        Or_error.is_ok (run_checked' ~run:as_stateful ~public_input ?handler proof_system ())
 
       let prove ~public_input ?proving_key ?handler (proof_system : _ t) =
         prove ~run:as_stateful ~public_input ?proving_key ?handler proof_system
@@ -2170,22 +2172,25 @@ module Run = struct
 
     let assert_square ?label x y = run (assert_square ?label x y)
 
-    let as_prover p = run (as_prover p)
+    let as_prover p = run (as_prover (As_prover.run_prover p))
 
     let next_auxiliary () = run next_auxiliary
 
-    let request_witness typ p = run (request_witness typ p)
+    let request_witness typ p = run (request_witness typ (As_prover.run_prover p))
 
-    let perform p = run (perform p)
+    let perform p = run (perform (As_prover.run_prover p))
 
     let request ?such_that typ r =
       match such_that with
-      | None -> request_witness typ (As_prover0.return r)
+      | None -> request_witness typ (fun () -> r)
       | Some such_that ->
-          let x = request_witness typ (As_prover0.return r) in
+          let x = request_witness typ (fun () -> r) in
           such_that x ; x
 
-    let exists ?request ?compute typ = run (exists ?request ?compute typ)
+    let exists ?request ?compute typ =
+      let request = Option.map request ~f:As_prover.run_prover in
+      let compute = Option.map compute ~f:As_prover.run_prover in
+      run (exists ?request ?compute typ)
 
     type nonrec response = response
 
@@ -2226,7 +2231,7 @@ module Run = struct
 
     let run_unchecked x = Perform.run_unchecked ~run:as_stateful x
 
-    let run_and_check x = Perform.run_and_check ~run:as_stateful (fun () -> x)
+    let run_and_check x = Perform.run_and_check ~run:as_stateful (fun () -> As_prover.run_prover x)
 
     let check x = Perform.check ~run:as_stateful x
   end
