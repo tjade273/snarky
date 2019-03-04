@@ -507,7 +507,8 @@ module Make_basic (Backend : Backend_intf.S) = struct
         ; next_auxiliary: int ref
         ; prover_state: 'prover_state option
         ; stack: string list
-        ; handler: Request.Handler.t }
+        ; handler: Request.Handler.t
+        ; as_prover: bool }
 
       type state = unit run_state
 
@@ -522,7 +523,8 @@ module Make_basic (Backend : Backend_intf.S) = struct
           ; next_auxiliary
           ; prover_state= _
           ; stack
-          ; handler } =
+          ; handler
+          ; as_prover } =
         { system
         ; input
         ; aux
@@ -531,7 +533,8 @@ module Make_basic (Backend : Backend_intf.S) = struct
         ; next_auxiliary
         ; prover_state
         ; stack
-        ; handler }
+        ; handler
+        ; as_prover }
 
       let set_handler handler state = {state with handler}
 
@@ -570,14 +573,19 @@ module Make_basic (Backend : Backend_intf.S) = struct
       let rec run : type a s. (a, s) t -> s run_state -> s run_state * a =
        fun t s ->
         match t with
+        | As_prover (x, k) ->
+            let s = {s with as_prover= true} in
+            let s', (_ : unit option) = run_as_prover (Some x) s in
+            run k {s' with as_prover= false}
+        | _ when s.as_prover ->
+            failwith
+              "Can't run checked code as the prover: the verifier's \
+               constraint system will not match."
         | Pure x -> (s, x)
         | With_label (lab, t, k) ->
             let {stack; _} = s in
             let s', y = run t {s with stack= lab :: stack} in
             run (k y) {s' with stack}
-        | As_prover (x, k) ->
-            let s', (_ : unit option) = run_as_prover (Some x) s in
-            run k s'
         | Add_constraint (c, t) ->
             if s.eval_constraints && not (Constraint.eval c (get_value s)) then
               failwithf "Constraint unsatisfied:\n%s\n%s\n"
@@ -640,7 +648,8 @@ module Make_basic (Backend : Backend_intf.S) = struct
           ; next_auxiliary
           ; prover_state= s0
           ; stack= []
-          ; handler= Option.value handler ~default:Request.Handler.fail }
+          ; handler= Option.value handler ~default:Request.Handler.fail
+          ; as_prover= false }
       end
     end
 
@@ -1748,7 +1757,8 @@ module Run = struct
         ; next_auxiliary= ref 1
         ; prover_state= Some ()
         ; stack= []
-        ; handler= Request.Handler.fail }
+        ; handler= Request.Handler.fail
+        ; as_prover= false }
 
     let run checked =
       let state', x = Runner.run checked !state in
