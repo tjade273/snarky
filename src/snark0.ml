@@ -2089,9 +2089,41 @@ module Run = struct
       end
     end
 
+    module Prover = struct
+      type t = unit
+
+      let eval_as_prover f =
+        if !state.Runner.as_prover && Option.is_some !state.Runner.prover_state
+        then (
+          let s = Option.value_exn !state.Runner.prover_state in
+          let s, a = f (Runner.get_value !state) s in
+          state := Runner.set_prover_state (Some s) !state ;
+          a )
+        else failwith "Can't evaluate prover code outside an as_prover block"
+
+      let read_var ~p var = eval_as_prover (As_prover.read_var var)
+
+      let get_state ~p = eval_as_prover As_prover.get_state
+
+      let set_state ~p s = eval_as_prover (As_prover.set_state s)
+
+      let read ~p typ var = eval_as_prover (As_prover.read typ var)
+
+      include Field.Constant.T
+    end
+
     module As_prover = struct
       include As_prover
       include Field.Constant.T
+
+      let run_prover f tbl s =
+        if !state.Runner.as_prover && Option.is_some !state.Runner.prover_state
+        then (
+          state := Runner.set_prover_state (Some s) !state ;
+          let a = f () in
+          let s' = Option.value_exn !state.Runner.prover_state in
+          (s', a) )
+        else failwith "Can't evaluate prover code outside an as_prover block"
     end
 
     module Handle = Handle
