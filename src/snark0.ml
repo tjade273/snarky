@@ -2124,7 +2124,8 @@ module Run = struct
     end
 
     module Handle = struct
-      type ('var, 'value) t = ('var, 'value) Handle.t = {var: 'var; value: 'value option}
+      type ('var, 'value) t = ('var, 'value) Handle.t =
+        {var: 'var; value: 'value option}
 
       let value handle () = As_prover.eval_as_prover (Handle.value handle)
 
@@ -2150,11 +2151,13 @@ module Run = struct
              ())
 
       let run_checked ~public_input ?handler (proof_system : _ t) =
-        Or_error.map (run_checked' ~run:as_stateful ~public_input ?handler proof_system ())
-          ~f:(fun (s, x, state) -> x)
+        Or_error.map
+          (run_checked' ~run:as_stateful ~public_input ?handler proof_system ())
+          ~f:(fun (s, x, state) -> x )
 
       let check ~public_input ?handler (proof_system : _ t) =
-        Or_error.is_ok (run_checked' ~run:as_stateful ~public_input ?handler proof_system ())
+        Or_error.is_ok
+          (run_checked' ~run:as_stateful ~public_input ?handler proof_system ())
 
       let prove ~public_input ?proving_key ?handler (proof_system : _ t) =
         prove ~run:as_stateful ~public_input ?proving_key ?handler proof_system
@@ -2176,7 +2179,8 @@ module Run = struct
 
     let next_auxiliary () = run next_auxiliary
 
-    let request_witness typ p = run (request_witness typ (As_prover.run_prover p))
+    let request_witness typ p =
+      run (request_witness typ (As_prover.run_prover p))
 
     let perform p = run (perform (As_prover.run_prover p))
 
@@ -2231,7 +2235,8 @@ module Run = struct
 
     let run_unchecked x = Perform.run_unchecked ~run:as_stateful x
 
-    let run_and_check x = Perform.run_and_check ~run:as_stateful (fun () -> As_prover.run_prover x)
+    let run_and_check x =
+      Perform.run_and_check ~run:as_stateful (fun () -> As_prover.run_prover x)
 
     let check x = Perform.check ~run:as_stateful x
   end
